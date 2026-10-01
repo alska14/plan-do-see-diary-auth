@@ -136,6 +136,29 @@ server.listen(0, async () => {
     ok((await j('GET', '/api/todos')).d.items.every((x) => x.id !== bt.id) && (await j('GET', '/api/plans')).d.items.every((x) => x.id !== bp.id), 'C125 A 목록에 B 자료 없음');
     const exA = await (await fetch(B + '/api/export', { headers: { Cookie: A.cookie } })).json();
     ok(!JSON.stringify(exA).includes('B 계획') && !JSON.stringify(exA).includes('password') && !JSON.stringify(exA).includes('scrypt'), 'C133 내보내기에 남의 자료·비밀번호 없음');
+    // ---- 6번 자료 가져오기 ----
+    const Ck = { cookie: '' }; const jc = (m, p0, b) => jf(Ck, m, p0, b);
+    ok((await jc('POST', '/api/import', exA)).s === 401, '가져오기: 비로그인 거절');
+    await jc('POST', '/api/auth/register', { username: 'carol', password: 'pw-carol-12345' });
+    ok((await jc('POST', '/api/import', { schema: 'other', plans: [] })).s === 422, '가져오기: 다른 형식 거부');
+    const tampered = JSON.parse(JSON.stringify(exA)); tampered.todos[0].plan_id = 99999;
+    ok((await jc('POST', '/api/import', tampered)).s === 422, '가져오기: 없는 계획을 가리키는 할 일 거부');
+    ok((await jc('GET', '/api/plans')).d.items.length === 0, '거부된 가져오기는 아무것도 남기지 않음');
+    const impR = await jc('POST', '/api/import', exA);
+    ok(impR.s === 201 && impR.d.imported.plans === exA.plans.length && impR.d.imported.todos === exA.todos.length && impR.d.imported.runs === exA.runs.length, '가져오기 성공, 개수 일치');
+    const cTodos = (await jc('GET', '/api/todos')).d.items, cRuns = (await jc('GET', '/api/runs')).d.items;
+    ok(cTodos.length === exA.todos.length && cRuns.length === exA.runs.length, '가져온 할 일·실행 기록 수 일치');
+    const srcT = exA.todos.find((x) => x.id === t1.id), dstT = cTodos.find((x) => x.title === srcT.title);
+    ok(dstT && dstT.created_at === srcT.created_at && dstT.due_date === srcT.due_date && dstT.status === srcT.status && dstT.tags.join() === srcT.tags.join(), '날짜·시각·상태·태그가 원본 그대로');
+    ok(cRuns.some((r) => r.started_at === run.started_at && r.blocker_reason === '비가 와서'), '실행 기록 시각·막힘 이유 원본 그대로');
+    ok((await jc('POST', '/api/import', exA)).s === 409, '두 번 가져오기 거절');
+    const imps = (await jc('GET', '/api/imports')).d.items;
+    ok(imps.length === 1 && imps[0].counts.todos === exA.todos.length && imps[0].imported_at, '가져온 이력이 남음');
+    ok((await j('GET', '/api/plans')).d.items.find((x) => x.id === aPlan), '가져온 뒤에도 원래 계정 자료 그대로');
+    const cr = (await jc('GET', `/api/review?period=week&date=${today}`)).d;
+    const ar = (await j('GET', `/api/review?period=week&date=${today}`)).d;
+    ok(cr.counts.todos === ar.counts.todos && cr.minutes.actual === ar.minutes.actual, '가져온 자료의 돌아보기 집계가 원본과 같음');
+    ok((await jc('POST', '/api/auth/delete-account', { password: 'pw-carol-12345' })).s === 200, '가져온 계정도 삭제 가능');
     // ---- 세션 만료·로그아웃·비밀번호 변경 ----
     const oldCookie = A.cookie;
     await db.execute({ sql: "UPDATE sessions SET expires_at='2000-01-01T00:00:00.000Z' WHERE user_id=(SELECT id FROM users WHERE username='bob')" });

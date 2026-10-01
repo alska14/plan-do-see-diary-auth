@@ -465,6 +465,31 @@ async function logout() {
   try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
   showAuth('login', '로그아웃했어요.');
 }
+// 6번(로그인 없는 버전)에서 내보낸 파일을 내 계정으로 가져온다. 날짜는 고치지 않고, 가져온 사실을 이력으로 남긴다.
+function importSection() {
+  const box = h('div', { class: 'import-box' });
+  const status = h('p', { class: 'small muted', role: 'status', 'aria-live': 'polite' });
+  const input = h('input', { id: 'import-file', type: 'file', accept: 'application/json,.json' });
+  const btn = h('button', { class: 'btn', type: 'button', onclick: (e) => busy(e.currentTarget, async () => {
+    const file = input.files[0];
+    if (!file) { status.textContent = '가져올 파일을 먼저 골라 주세요.'; return; }
+    try {
+      const r = await api('/api/import', { method: 'POST', body: JSON.parse(await file.text()) });
+      status.textContent = `가져왔어요: 계획 ${r.imported.plans}개 · 할 일 ${r.imported.todos}개 · 실행 기록 ${r.imported.runs}개`;
+      toast('6번 자료를 가져왔어요.'); load();
+    } catch (er) { status.textContent = er instanceof SyntaxError ? '올바른 JSON 파일이 아닙니다.' : er.message; }
+  }) }, '가져오기');
+  async function load() {
+    const { items } = await api('/api/imports');
+    box.replaceChildren(...items.map((i) => h('p', { class: 'small' }, `가져온 이력 · ${fmtDT(i.imported_at)} · ${i.source} · 계획 ${i.counts.plans}, 할 일 ${i.counts.todos}, 실행 기록 ${i.counts.runs}`)));
+    if (items.length) { input.disabled = true; btn.disabled = true; }
+  }
+  load().catch(() => {});
+  return h('div', {}, h('h3', {}, '6번 자료 가져오기'),
+    h('p', { class: 'small muted' }, '6번 다이어리에서 "내 자료 파일로 내보내기"로 받은 파일을 내 계정으로 옮겨요. 날짜·시각은 원본 그대로이고, 계정마다 한 번만 가져올 수 있어요. 가져온 이력은 아래에 남아요.'),
+    h('div', { class: 'field mt2' }, h('label', { for: 'import-file' }, '내보낸 파일(.json)'), input),
+    h('div', { class: 'row mt2' }, btn), status, box);
+}
 function openAccount() {
   const note = h('p', { class: 'small muted' }, '계정을 지우면 내 자료(계획·할 일·실행 기록·돌아보기)도 함께 지워지고 되돌릴 수 없어요. 지우기 전에 위의 "내 자료 파일로 내보내기"로 파일을 받아 두세요.');
   openInfo('내 계정',
@@ -479,6 +504,8 @@ function openAccount() {
         ],
         onSubmit: async (v) => { await api('/api/auth/password', { method: 'POST', body: v }); toast('비밀번호를 바꿨어요.'); },
       }) }, '비밀번호 바꾸기')),
+    h('hr', { class: 'sep' }),
+    importSection(),
     h('hr', { class: 'sep' }),
     h('h3', {}, '계정 삭제'), note,
     h('div', { class: 'row mt3' }, h('button', { class: 'btn danger', type: 'button', onclick: () => openForm({
