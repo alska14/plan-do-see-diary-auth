@@ -48,6 +48,7 @@ const isoToKstInput = (iso) => new Date(Date.parse(iso) + 9 * 3600e3).toISOStrin
 async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith('/api/auth/')) { showAuth('login', '로그인이 끝났어요. 다시 로그인해 주세요.'); const e = new Error(data.error || '로그인이 필요합니다.'); e.fields = {}; e.handled = true; throw e; }
   if (!res.ok) { const e = new Error(data.error || '요청에 실패했습니다.'); e.fields = data.fields || {}; throw e; }
   return data;
 }
@@ -398,6 +399,7 @@ async function viewReview() {
 // ---------- 라우터 ----------
 const VIEWS = { plans: viewPlans, todos: viewTodos, runs: viewRuns, review: viewReview };
 async function route() {
+  if (!ME) return;
   const key = (location.hash.match(/^#\/(\w+)/) || [])[1];
   const name = VIEWS[key] ? key : 'plans';
   document.body.dataset.stage = { plans: 'plan', todos: 'do', runs: 'do', review: 'see' }[name];
@@ -406,8 +408,94 @@ async function route() {
   catch (e) { view.replaceChildren(h('div', { class: 'empty' }, h('h3', {}, '불러오지 못했어요'), h('p', {}, e.message), h('button', { class: 'btn', onclick: () => route() }, '다시 시도'))); }
 }
 window.addEventListener('hashchange', () => { document.getElementById('main').focus({ preventScroll: true }); route(); });
+// ---------- 로그인 · 가입 · 내 계정 ----------
+let ME = null;
+const accountBtn = document.getElementById('account');
+function setAuthState(user) {
+  ME = user;
+  document.body.dataset.auth = user ? 'in' : 'out';
+  accountBtn.querySelector('.who').textContent = user ? user.username : '';
+}
+// 로그인/가입 화면. 로그인 상태가 아닐 때 첫 화면은 항상 이것이다.
+function showAuth(mode = 'login', message) {
+  setAuthState(null);
+  if (dlg.open) dlg.close();
+  const isLogin = mode === 'login';
+  const err = h('div', { class: 'error-summary', role: 'alert', tabindex: '-1', hidden: !message }, message || '');
+  const mk = (id, label, type, help, auto) => ({
+    id, input: h('input', { id, name: id, type, autocomplete: auto, required: true, maxlength: 128, 'aria-describedby': help ? `${id}-help` : false }),
+    label, help,
+  });
+  const fUser = mk('au-username', '아이디', 'text', isLogin ? '' : '영문 소문자·숫자·. _ - 로 3~30자', 'username');
+  const fPass = mk('au-password', '비밀번호', 'password', isLogin ? '' : '8자 이상 (영문·숫자·기호 자유)', isLogin ? 'current-password' : 'new-password');
+  const field = (f) => h('div', { class: 'field' }, h('label', { for: f.id }, f.label), f.input, f.help ? h('span', { class: 'help', id: `${f.id}-help` }, f.help) : null, h('span', { class: 'error-text', id: `${f.id}-err`, hidden: true }));
+  const submit = h('button', { class: 'btn primary', type: 'submit' }, isLogin ? '로그인' : '가입하고 시작하기');
+  const form = h('form', { class: 'auth-form', novalidate: true }, field(fUser), field(fPass), h('div', { class: 'row mt3' }, submit));
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    err.hidden = true;
+    for (const f of [fUser, fPass]) { document.getElementById(`${f.id}-err`).hidden = true; f.input.removeAttribute('aria-invalid'); }
+    await busy(submit, async () => {
+      try {
+        const r = await api(isLogin ? '/api/auth/login' : '/api/auth/register', { method: 'POST', body: { username: fUser.input.value, password: fPass.input.value } });
+        fPass.input.value = '';
+        setAuthState({ username: r.user.username });
+        location.hash = '#/plans';
+        await route();
+      } catch (e) {
+        const fe = { 'au-username': e.fields.username, 'au-password': e.fields.password };
+        const list = Object.entries(fe).filter(([, m]) => m);
+        for (const [id, m] of list) { const box = document.getElementById(`${id}-err`); box.hidden = false; box.textContent = m; document.getElementById(id).setAttribute('aria-invalid', 'true'); }
+        err.textContent = list.length ? '입력한 내용에 문제가 있습니다' : e.message; err.hidden = false; err.focus();
+      }
+    });
+  });
+  view.replaceChildren(h('section', { class: 'card auth-card', 'aria-labelledby': 'auth-h' },
+    h('div', { class: 'eyebrow' }, isLogin ? '로그인' : '새 계정'),
+    h('h2', { id: 'auth-h' }, isLogin ? '내 다이어리 열기' : '내 다이어리 만들기'),
+    h('p', { class: 'lead' }, isLogin ? '내 계획과 기록은 로그인한 나만 볼 수 있어요.' : '아이디와 비밀번호만 있으면 돼요. 이메일은 받지 않아요.'),
+    err, form,
+    h('p', { class: 'small muted mt3' }, '계정을 지우면 내 자료도 함께 지워집니다.'),
+    h('p', { class: 'mt2' }, isLogin ? '처음이신가요? ' : '이미 계정이 있나요? ',
+      h('a', { href: '#', onclick: (ev) => { ev.preventDefault(); showAuth(isLogin ? 'register' : 'login'); } }, isLogin ? '계정 만들기' : '로그인'))));
+  document.getElementById('main').focus({ preventScroll: true });
+}
+
+async function logout() {
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+  showAuth('login', '로그아웃했어요.');
+}
+function openAccount() {
+  const note = h('p', { class: 'small muted' }, '계정을 지우면 내 자료(계획·할 일·실행 기록·돌아보기)도 함께 지워지고 되돌릴 수 없어요. 지우기 전에 위의 "내 자료 파일로 내보내기"로 파일을 받아 두세요.');
+  openInfo('내 계정',
+    h('p', {}, '로그인한 아이디: ', h('strong', {}, ME.username)),
+    h('div', { class: 'row mt3' },
+      h('button', { class: 'btn', type: 'button', onclick: () => { dlg.close(); logout(); } }, '로그아웃'),
+      h('button', { class: 'btn', type: 'button', onclick: () => openForm({
+        title: '비밀번호 바꾸기', submitLabel: '바꾸기',
+        fields: [
+          { name: 'current_password', label: '지금 비밀번호', type: 'password', full: true, required: true, max: 128 },
+          { name: 'new_password', label: '새 비밀번호', type: 'password', full: true, required: true, max: 128, help: '8자 이상. 바꾸면 다른 기기의 로그인은 모두 풀려요.' },
+        ],
+        onSubmit: async (v) => { await api('/api/auth/password', { method: 'POST', body: v }); toast('비밀번호를 바꿨어요.'); },
+      }) }, '비밀번호 바꾸기')),
+    h('hr', { class: 'sep' }),
+    h('h3', {}, '계정 삭제'), note,
+    h('div', { class: 'row mt3' }, h('button', { class: 'btn danger', type: 'button', onclick: () => openForm({
+      title: '계정을 지울까요?', submitLabel: '계정과 자료 지우기',
+      fields: [{ name: 'password', label: '비밀번호 확인', type: 'password', full: true, required: true, max: 128, help: '지우면 내 자료도 함께 지워지고 되돌릴 수 없어요.' }],
+      onSubmit: async (v) => { await api('/api/auth/delete-account', { method: 'POST', body: v }); showAuth('register', '계정과 자료를 지웠어요.'); },
+    }) }, '계정 삭제…')));
+}
+accountBtn.addEventListener('click', openAccount);
+
 (async () => {
-  try { META = await api('/api/meta'); document.getElementById('notice-text').textContent = META.notice; }
-  catch { view.replaceChildren(h('div', { class: 'empty' }, h('h3', {}, '서버에 연결할 수 없어요'), h('p', {}, '잠시 뒤 새로고침해 주세요.'))); return; }
+  try {
+    META = await api('/api/meta'); document.getElementById('notice-text').textContent = META.notice;
+    const me = await api('/api/auth/me');
+    if (!me.user) { showAuth('login'); return; }
+    setAuthState(me.user);
+  }
+  catch (e) { if (e.handled) return; view.replaceChildren(h('div', { class: 'empty' }, h('h3', {}, '서버에 연결할 수 없어요'), h('p', {}, '잠시 뒤 새로고침해 주세요.'))); return; }
   route();
 })();

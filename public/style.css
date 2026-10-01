@@ -268,3 +268,11 @@ footer a { color: var(--fg); text-decoration: underline; }
 
 .mt2 { margin-top: var(--s2); } .mt3 { margin-top: var(--s3); } .mt4 { margin-top: var(--s4); }
 .item.one { grid-template-columns: 1fr; } .item.two { grid-template-columns: 1fr auto; }
+
+/* 로그인 · 계정 */
+body[data-auth='out'] .tabs, body[data-auth='out'] #account, body[data-auth='out'] #export { display: none; }
+.auth-card { max-width: 440px; margin: var(--s6) auto; }
+.auth-form .field + .field { margin-top: var(--s3); }
+#account .who { font-weight: 700; }
+.sep { border: 0; border-top: 1px solid var(--border); margin: var(--s4) 0; }
+.btn.danger { color: var(--danger); border-color: var(--danger); }

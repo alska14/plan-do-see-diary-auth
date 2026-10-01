@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="stylesheet" href="/style.css">
 </head>
-<body data-stage="plan">
+<body data-stage="plan" data-auth="out">
   <a class="skip" href="#main">본문으로 건너뛰기</a>
   <header class="top">
     <div class="wrap">
@@ -22,15 +22,18 @@
             <small>계획 → 실제로 한 일 → 돌아보기</small>
           </div>
         </div>
+        <div class="row">
+        <button class="btn" id="account" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg><span>내 계정 · <span class="who"></span></span></button>
         <a class="btn" id="export" href="/api/export" download>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
           <span>내 자료 <span class="label-long">파일로 </span>내보내기</span>
         </a>
+        </div>
       </div>
       <div class="notice" role="note" id="notice">
         <div class="notice-box">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          <p><strong>공개 상태 · </strong><span id="notice-text">지금은 로그인이 없어 링크를 아는 사람은 누구나 볼 수 있습니다. 남이 봐도 괜찮은 내용만 넣으세요.</span></p>
+          <p><strong>공개 범위 · </strong><span id="notice-text">내 기록은 로그인한 나만 볼 수 있습니다. 계정을 지우면 내 자료도 함께 지워집니다.</span></p>
         </div>
       </div>
     </div>
